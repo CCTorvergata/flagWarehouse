@@ -8,5 +8,6 @@ RUN pip install -r /flagWarehouse/client/requirements.txt
 
 ENV URL=
 ENV API_TOKEN=
+ENV USER=
 
-CMD python3 ./client.py -s $URL -u prod -t $API_TOKEN -d exploits/
+CMD python3 ./client.py -s $URL -u $USER -t $API_TOKEN -d exploits/

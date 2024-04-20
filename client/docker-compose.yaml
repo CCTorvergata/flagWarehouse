@@ -12,6 +12,7 @@ services:
     environment:
       - URL=http://172.18.0.2:5555
       - API_TOKEN="team_token"
+      - USER=Iaio99
 
 networks:
   server_flagWarehouse-network:
