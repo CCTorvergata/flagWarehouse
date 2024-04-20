@@ -92,8 +92,7 @@ class CCITSubmitter(Submitter):
 	def submit_flags(self, flags):
 		res = requests.put(current_app.config['SUB_URL'],
 							headers={'X-Team-Token': current_app.config['TEAM_TOKEN']},
-							json=flags,
-							timeout=(current_app.config['SUB_INTERVAL'] / current_app.config['SUB_LIMIT']))
+							json=flags)
 
 		# Check if the gameserver sent a response about the flags or if it sent an error
 		if 'application/json' in res.headers['Content-Type']:
@@ -196,6 +195,7 @@ def loop(app: Flask):
 		logger.info(f'{GREEN}starting.{END}')
 		database = db.get_db()
 		queue = OrderedSetQueue()
+
 		while True:
 			s_time = time.time()
 			expiration_time = (datetime.now() - timedelta(seconds=current_app.config['FLAG_ALIVE'])).replace(microsecond=0).isoformat(sep=' ')
