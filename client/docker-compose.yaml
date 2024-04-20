@@ -4,8 +4,15 @@ services:
       context: .
     container_name: flagWarehouse-client
     restart: unless-stopped
+    networks:
+      server_flagWarehouse-network:
+        ipv4_address: 172.18.0.3
     volumes:
       - ./exploits:/flagWarehouse/client/exploits:ro
     environment:
-      - URL=http://192.168.122.114:5555
+      - URL=http://172.18.0.2:5555
       - API_TOKEN="team_token"
+
+networks:
+  server_flagWarehouse-network:
+    external: true

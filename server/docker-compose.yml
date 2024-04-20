@@ -1,13 +1,20 @@
-version: "3.3"
-
 services:
-
   server:
-    container_name: flag_warehouse
+    container_name: flagWarehouse-server
     build: 
       context: .
+    networks:
+      flagWarehouse-network:
+        ipv4_address: 172.18.0.2
     ports:
       - 5555:5555
     volumes:
       - ./config.py:/server/config.py:ro
       - ./instance:/server/instance/
+
+networks:
+  flagWarehouse-network:
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.18.0.0/29
