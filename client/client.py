@@ -168,6 +168,7 @@ def download_flag_ids_ccit(flagid_url, nopTeam, team_token) -> bool:
         time.sleep(5)
         return False
 
+
 def download_flag_ids_hitb(flagid_url, nopTeam, team_token) -> bool:
     """
     Returns True if successful
@@ -207,8 +208,8 @@ def download_flag_ids_hitb(flagid_url, nopTeam, team_token) -> bool:
         time.sleep(5)
         return False
 
-# download_flag_ids = download_flag_ids_ccit
-download_flag_ids = download_flag_ids_hitb
+download_flag_ids = download_flag_ids_ccit
+# download_flag_ids = download_flag_ids_hitb
 
 
 def main(args):
