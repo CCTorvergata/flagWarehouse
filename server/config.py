@@ -6,7 +6,7 @@ class Config(object):
 	TEAM_TOKEN = '' # team token for flag submission
 
 	WEB_PASSWORD = 'password'
-	API_TOKEN = 'custom_token'
+	API_TOKEN = 'p1cMWXidqD0Hud7Uf6DV'
 	SECRET_KEY = 'not_secret_key'
 	
 	# Teams
