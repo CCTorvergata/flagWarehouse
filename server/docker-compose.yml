@@ -4,8 +4,7 @@ services:
     build: 
       context: .
     networks:
-      flagWarehouse-network:
-        ipv4_address: 172.18.0.2
+      - flagWarehouse-network
     ports:
       - 5555:5555
     volumes:
@@ -14,7 +13,4 @@ services:
 
 networks:
   flagWarehouse-network:
-    ipam:
-      driver: default
-      config:
-        - subnet: 172.18.0.0/29
+      driver: bridge

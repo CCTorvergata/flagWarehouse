@@ -5,14 +5,13 @@ services:
     container_name: flagWarehouse-client
     restart: unless-stopped
     networks:
-      server_flagWarehouse-network:
-        ipv4_address: 172.18.0.3
+      - server_flagWarehouse-network
     volumes:
       - ./exploits:/flagWarehouse/client/exploits:ro
     environment:
-      - URL=http://172.18.0.2:5555
-      - API_TOKEN="team_token"
-      - USER=Iaio99
+      - URL=http://server:5555
+      - API_TOKEN=p1cMWXidqD0Hud7Uf6DV
+      - USER=CC24_TorVergata
 
 networks:
   server_flagWarehouse-network:
