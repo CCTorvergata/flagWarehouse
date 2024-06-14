@@ -2,3 +2,4 @@ pwntools
 pycryptodome
 requests
 tqdm
+sagemath
