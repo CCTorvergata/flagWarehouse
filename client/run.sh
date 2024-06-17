@@ -1,13 +1,13 @@
 #!/bin/bash
 
 # Edit
-SERVER="10.80.9.4"
-USERNAME="player3"
-TOKEN="custom_token"
-
+SERVER="localhost"
 PORT=5555
+USERNAME="CC_TorVergata"
+TOKEN="your_token"
+TYPE="ccit"
 THREADS=12
 
-echo "REMEMBER chmod +x ./exploit.py"
+#echo "REMEMBER chmod +x ./exploit.py"
 
-python3 client.py -s http://$SERVER:$PORT -u $USERNAME -t $TOKEN -d ./exploits/ -n $THREADS
+python3 client.py -s http://$SERVER:$PORT -u $USERNAME --type $TYPE -t $TOKEN -d ./exploits/ -n $THREADS -v
