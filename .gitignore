@@ -135,3 +135,5 @@ dmypy.json
 # flag_ids
 flag_ids.json
 
+**/config.py
+**/docker-compose.yml
