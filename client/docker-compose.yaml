@@ -7,7 +7,7 @@ services:
     networks:
       - server_flagWarehouse-network
     volumes:
-      - ./exploits:/flagWarehouse/client/exploits:ro
+      - ./exploits:/flagWarehouse/client/exploits:rw
     environment:
       - URL=http://server:5555
       - API_TOKEN=p1cMWXidqD0Hud7Uf6DV
