@@ -136,6 +136,7 @@ def main(args):
     server_url = args.server_url
     user = args.user
     token = args.token
+    global verbose
     verbose = args.verbose
     exploit_directory = args.exploit_directory
     num_threads = args.num_threads
