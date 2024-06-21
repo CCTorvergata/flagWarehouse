@@ -3,3 +3,4 @@ pycryptodome
 requests
 tqdm
 sagemath
+beautifulsoup4
