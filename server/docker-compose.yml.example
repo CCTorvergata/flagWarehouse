@@ -3,6 +3,7 @@ services:
     container_name: flagWarehouse-server
     build: 
       context: .
+    restart: unless-stopped
     networks:
       - flagWarehouse-network
     ports:
