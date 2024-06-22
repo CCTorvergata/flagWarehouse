@@ -215,13 +215,20 @@ def main(args):
             try:
                 scripts = [os.path.join(exploit_directory, s) for s in os.listdir(exploit_directory) if
                 os.path.isfile(os.path.join(exploit_directory, s)) and not s.startswith('.')]
+                
+                #Remove non python files
+                for s in scripts:
+                    if os.path.splitext(s)[-1].lower() != ".py":
+                        scripts.remove(s)
+                        logging.warning(f'{os.path.basename(s)} is not a python script, ignoring...')
 
-        # Fix non executable
+                # Fix non executable
                 for s in scripts:
                     if not os.access(s, os.X_OK):
                         os.chmod(s, 0o755)
                         logging.warning(f'{os.path.basename(s)} is not executable, giving permission to execute...')
 
+                # Fix no shbang
                 for s in scripts:
                     with open(s, 'r+', encoding='utf-8') as f:
                         lines = f.readlines()
