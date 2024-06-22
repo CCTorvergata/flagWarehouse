@@ -214,36 +214,34 @@ def main(args):
             # Load exploits
             try:
                 scripts = [os.path.join(exploit_directory, s) for s in os.listdir(exploit_directory) if
-                           os.path.isfile(os.path.join(exploit_directory, s)) and not s.startswith('.')]
+                os.path.isfile(os.path.join(exploit_directory, s)) and not s.startswith('.')]
 
-                # Filter non executable
+        # Fix non executable
                 for s in scripts:
                     if not os.access(s, os.X_OK):
-                        logging.warning(f'{os.path.basename(s)} is not executable, hence it will be skipped...')
+                        os.chmod(s, 0o755)
+                        logging.warning(f'{os.path.basename(s)} is not executable, giving permission to execute...')
 
-                # Remove non executable scripts
-                scripts = list(filter(lambda script: os.access(script, os.X_OK), scripts))
-
-                # Check for shebang
-                no_shbang = []
                 for s in scripts:
-                    with open(s, 'r', encoding='utf-8') as f:
-                        if not f.read(2) == '#!':
-                            logging.warning(f'{os.path.basename(s)} no shebang #!, hence it will be skipped...')
-                            no_shbang.append(s)
+                    with open(s, 'r+', encoding='utf-8') as f:
+                        lines = f.readlines()
+                        if lines[0] != '#!/usr/bin/env python3\n':
+                            lines.insert(0, '#!/usr/bin/env python3\n')
+                            f.seek(0, 0)
+                            f.writelines(lines)
+                            f.close()
+                            logging.warning(f'{os.path.basename(s)} no shebang #!, adding it...')
 
-                # Remove scripts without shebang
-                scripts = list(filter(lambda script: script not in no_shbang, scripts))
 
             except FileNotFoundError:
                 logging.error('The directory specified does not exist.')
                 logging.info('Exiting...')
                 sys.exit(0)
             except PermissionError:
-                logging.error(
-                    'You do not have the necessary permissions to use this directory.')
+                logging.error('You do not have the necessary permissions to use this directory.')
                 logging.info('Exiting')
                 sys.exit(0)
+
             if scripts:
                 logging.info(
                     f'Starting new round. Running {len(scripts)} exploits.')
