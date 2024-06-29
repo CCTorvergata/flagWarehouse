@@ -105,7 +105,7 @@ def run_exploit(exploit: str, ip: str, round_duration: int, server_url: str, tok
         [exploit, ip], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
    
 
-    timer = Timer(math.ceil(0.5 * round_duration), timer_out, args=[p])
+    timer = Timer(math.ceil(0.9 * round_duration), timer_out, args=[p])
     timer.start()
     
     while True:
