@@ -16,38 +16,29 @@ def log(message):
 
 IP_ADDRESS = sys.argv[1]
 dir_path = os.path.dirname(os.path.realpath(__file__)) + '/../'
-flag_ids = {}
-with open(dir_path + 'flag_ids.json', 'r', encoding='utf-8') as f:
-    flag_ids = json.loads(f.read())
-    #log(flag_ids)
 
-  
-# Adjust if needed
-headers = { 
-    'User-Agent': utils.user_agent(),
-    }
-data = {
-    'email' : utils.email(),
-    'username' : utils.username(max=12),
-    'password' : utils.password(max=12)
-}
-
+def generate_secure_random_string(length=10):
+    characters = string.ascii_letters + string.digits
+    secure_random_string = ''.join(secrets.choice(characters) for _ in range(length))
+    return secure_random_string
 
 # Adjust if needed
 SERVICE = "TEST"
 PORT = 1234
 TARGET_URL = f'http://{IP_ADDRESS}:{PORT}'
 
-valid_users = flag_ids.get(SERVICE, {}).get(IP_ADDRESS, [])
-#print(valid_users)
+with open(dir_path + 'flag_ids.json', 'r', encoding='utf-8') as f:
+    flag_ids = json.loads(f.read())
+    #log(flag_ids)
 
-for user in valid_users:
+myfFlagIds = flag_ids[SERVICE][IP_ADDRESS]
 
-    s = requests.Session()
-    res = s.get(TARGET_URL + '/register', headers=headers, data=data)
-    res = s.get(TARGET_URL + '/login', headers=headers, data=data)
+flags = []
 
+for i in range(myfFlagIds):
+    try:
+        #put your code here
+    except Exception as e:
+        log(e)
 
-    soup = BeautifulSoup(res, features="html5lib")
-    print(soup)
-
+print(flags)

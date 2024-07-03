@@ -1,6 +1,5 @@
 FROM python:slim
 
-
 RUN mkdir -p /flagWarehouse/client/
 COPY . /flagWarehouse/client/
 WORKDIR /flagWarehouse/client
