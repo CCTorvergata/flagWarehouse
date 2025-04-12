@@ -23,7 +23,7 @@ class Flag_Ids_Downloader:
         Returns True if successful
         """
         try:
-            r = requests.get(self.flagid_url + "?team=" + self.nopTeam, timeout=15)
+            r = requests.get(self.flagid_url + "?team=" + self.nopTeam.split(".")[-2], timeout=15)
 
             if r.status_code != 200:
                 logging.error(
