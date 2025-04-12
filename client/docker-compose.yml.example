@@ -2,7 +2,9 @@ services:
   attacker:
     build:
       context: .
+      network: host
     container_name: flagWarehouse-client
+    network_mode: host
     restart: unless-stopped
     networks:
       - server_flagWarehouse-network
@@ -12,7 +14,3 @@ services:
       - URL=http://server:5555
       - API_TOKEN=p1cMWXidqD0Hud7Uf6DV
       - USER=CC24_TorVergata
-
-networks:
-  server_flagWarehouse-network:
-    external: true
