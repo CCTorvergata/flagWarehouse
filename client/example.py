@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import os
 import sys
+import secrets
 sys.path.insert(1, '../imports/')
 sys.path.insert(1, 'imports/')
 
@@ -25,6 +26,7 @@ def generate_secure_random_string(length=10):
 # Adjust if needed
 SERVICE = "TEST"
 PORT = 1234
+TEAM_ID = IP_ADDRESS.split(".")[-2]
 TARGET_URL = f'http://{IP_ADDRESS}:{PORT}'
 
 with open(dir_path + 'flag_ids.json', 'r', encoding='utf-8') as f:
