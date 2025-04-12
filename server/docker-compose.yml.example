@@ -3,15 +3,11 @@ services:
     container_name: flagWarehouse-server
     build: 
       context: .
+      network: host
     restart: unless-stopped
+    network_mode: host
     networks:
       - flagWarehouse-network
-    ports:
-      - 5555:5555
     volumes:
       - ./config.py:/server/config.py:ro
       - ./instance:/server/instance/
-
-networks:
-  flagWarehouse-network:
-      driver: bridge
