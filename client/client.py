@@ -11,13 +11,11 @@ import sys
 import time
 import random
 from datetime import datetime
-from multiprocessing import Pool
-from threading import Timer
+from multiprocessing import Pool, Manager
+from threading import Timer, Thread, Event
+from queue import Empty
 
 import requests
-import json
-
-import flagids
 
 
 END				= "\033[0m"
@@ -45,11 +43,13 @@ BANNER = '''
 
 '''[1:]
 
+# --- NUOVA COSTANTE ---
+SUBMISSION_INTERVAL = 15  # Invia flag ogni 15 secondi
 
 def parse_args():
     # noinspection PyTypeChecker
     parser = argparse.ArgumentParser(description='''Run all the exploits in the specified
-                                            directory against all the teams.''',
+                                                directory against all the teams.''',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     parser.add_argument('-s', '--server-url',
@@ -81,10 +81,10 @@ def parse_args():
                         help='Verbose output')
 
     parser.add_argument('-y', '--type',
-                       type=str,
-                       choices = ['ccit', 'hitb'],
-                       default = 'ccit',
-                       help='type of flagids')
+                        type=str,
+                        choices=['ccit', 'hitb'],
+                        default='ccit',
+                        help='type of flagids')
 
     parser.add_argument('-n', '--num-threads',
                         type=int,
@@ -96,200 +96,310 @@ def parse_args():
     return parser.parse_args()
 
 
-def run_exploit(exploit: str, ip: str, round_duration: int, server_url: str, token: str, pattern, user: str):
+def parse_flag(flag_str):
+    """Funzione helper per parsare la flag e gestire eccezioni."""
+    try:
+        # Usiamo sempre stringhe per consistenza nelle chiavi
+        round_number = str(int(flag_str[0:2], 36))
+        team_number = str(int(flag_str[2:4], 36))
+        service_number = str(int(flag_str[4:6], 36))
+        return round_number, team_number, service_number
+    except (ValueError, IndexError):
+        return None, None, None
+
+
+def run_exploit(exploit_path, team_ip, rounds, round_duration, flag_pattern, user, 
+                service_status, exploit_to_service_map, last_success_memory, flag_queue):
+    """
+    Esegue un exploit usando una struttura dati condivisa "piatta" e salvando il nome dell'exploit.
+    """
     def timer_out(process):
         timer.cancel()
-        process.kill()
+        try: process.kill()
+        except ProcessLookupError: pass
 
-    p = subprocess.Popen(
-        [exploit, ip], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-   
+    exploit_name = os.path.basename(exploit_path)
+    team_number_str = team_ip.split('.')[2]
 
-    timer = Timer(math.ceil(0.9 * round_duration), timer_out, args=[p])
-    timer.start()
-    
-    while True:
-        output = p.stdout.readline().decode().strip()
-    
-        if output == '' and p.poll() is not None:
-            break
+    for round_num in rounds:
+        round_num_str = str(round_num)
         
-        if output:
-            logging.debug(f'{os.path.basename(exploit)}@{ip} => {output}')
-            flags = set(pattern.findall(output))
+        known_service_id = exploit_to_service_map.get(exploit_name)
+        if known_service_id:
+            status_key = f"{known_service_id}:{team_number_str}:{round_num_str}"
+            if service_status.get(status_key):
+                #logging.debug(f"SKIP: Key {status_key} already completed by {service_status.get(status_key)}. Skipping {exploit_name}.")
+                continue
+
+        p = None
+        try:
+            p = subprocess.Popen([exploit_path, team_ip, str(round_num)], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            timer = Timer(math.ceil(0.9 * round_duration / len(rounds)), timer_out, args=[p])
+            timer.start()
+
+            for line in iter(p.stdout.readline, b''):
+                output = line.decode(errors='ignore').strip()
+                if not output: continue
+
+                for f in set(flag_pattern.findall(output)):
+                    parsed_round, parsed_team, parsed_service = parse_flag(f)
+                    if not parsed_service:
+                        logging.warning(f"Flag malformata da {exploit_name}: {f}")
+                        continue
+
+                    if exploit_name not in exploit_to_service_map:
+                        exploit_to_service_map[exploit_name] = parsed_service
+                        logging.info(f"LEARNED: {BLUE}{exploit_name}{END} targets service {CYAN}{parsed_service}{END}")
+
+                    status_key = f"{parsed_service}:{parsed_team}:{parsed_round}"
+                    service_status[status_key] = exploit_name
+
+                    memory_key = f"{parsed_service}:{parsed_team}"
+                    current_max_round, _ = last_success_memory.get(memory_key, (-1, None))
+
+                    # Parsiamo il round corrente come intero per il confronto
+                    current_round_int = int(parsed_round)
+
+                    if current_round_int > current_max_round:
+                        last_success_memory[memory_key] = (current_round_int, exploit_name)
+                        # logging.info(f"MEMORY UPDATE: For {memory_key}, new best exploit is {exploit_name} from round {current_round_int}")
+                    
+                    logging.info(f"Got flag from {BLUE}{exploit_name}{END} for service {CYAN}{parsed_service}{END}, team {parsed_team}, round {parsed_round}")
+                    
+                    flag_data = {'flag': f, 'exploit_name': exploit_name, 'team_ip': team_ip, 'time': datetime.now().isoformat(sep=' ')}
+                    flag_queue.put(flag_data)
+
+            p.stdout.close()
+            return_code = p.wait()
+            timer.cancel()
+
+            if return_code not in [0, -9, -15]:  # 0=OK, -9=SIGKILL, -15=SIGTERM
+                stderr_output = p.stderr.read().decode(errors='ignore').strip()
+                if stderr_output: # Logga solo se c'è un output di errore
+                    logging.error(f'{RED}{exploit_name}{END}@{team_ip} (round {round_num}) terminato con codice {HIGH_RED}{return_code}{END}. Stderr: {stderr_output}')
             
-            if flags:
-                exp = exploit.split('/')[-1][:-3]
-                logging.info(f'Got {GREEN}{len(flags)}{END} flags with {BLUE}{exp}{END} from {ip}')
-                msg = {'username': user, 'flags': []}
-                t_stamp = datetime.now().replace(microsecond=0).isoformat(sep=' ')
-                
-                for flag in flags:
-                    msg['flags'].append({'flag': flag,
-                                         'exploit_name': os.path.basename(exploit),
-                                         'team_ip': ip,
-                                         'time': t_stamp})
-                
-                requests.post(server_url + '/api/upload_flags',
-                              headers={'X-Auth-Token': token},
-                              json=msg)
-    p.stdout.close()
-    return_code = p.poll()
-    timer.cancel()
-    
-    if return_code == -9:
-        logging.error(
-            f'{RED}{os.path.basename(exploit)}{END}@{ip} was killed because it took too long to finish')
-    elif return_code != 0:
-        logging.error(
-            f'{RED}{os.path.basename(exploit)}{END}@{ip} terminated with error code {HIGH_RED}{return_code}{END}')
+            p.stderr.close()
+
+        except Exception as e:
+            logging.error(f"Errore imprevisto eseguendo {exploit_name} su {team_ip}: {e}")
+        finally:
+            if p and p.poll() is None:
+                p.kill()
+
+# --- NUOVA FUNZIONE ---
+def flag_submitter(flag_queue, server_url, token, user, stop_event):
+    """
+    Un thread che raccoglie le flag dalla coda e le invia al server in batch.
+    """
+    logging.info(f"Thread submitter avviato. Invierà le flag ogni {SUBMISSION_INTERVAL} secondi.")
+    while not stop_event.is_set():
+        try:
+            # Aspetta l'intervallo di tempo prima di provare a inviare
+            stop_event.wait(SUBMISSION_INTERVAL)
+
+            flags_to_send = []
+            while not flag_queue.empty():
+                try:
+                    flags_to_send.append(flag_queue.get_nowait())
+                except Empty:
+                    # La coda è stata svuotata da un altro processo nel frattempo, usciamo dal ciclo
+                    break
+            
+            if not flags_to_send:
+                continue
+
+            logging.info(f"Invio di {YELLOW}{len(flags_to_send)}{END} flag al server...")
+            msg = {'username': user, 'flags': flags_to_send}
+            
+            try:
+                requests.post(f"{server_url}/api/upload_flags", headers={'X-Auth-Token': token}, json=msg, timeout=10)
+                logging.info(f"{GREEN}Batch di flag inviato con successo!{END}")
+            except requests.exceptions.RequestException as e:
+                logging.error(f"{RED}Errore nell'invio del batch di flag al server: {e}. Rimetto le flag in coda.{END}")
+                # Reinserisci le flag nella coda per il prossimo tentativo
+                for flag_data in flags_to_send:
+                    flag_queue.put(flag_data)
+
+        except Exception as e:
+            logging.error(f"Errore critico nel thread submitter: {e}")
 
 
 def main(args):
-    global pool
+    pool = None
+    manager = None
+    submitter_thread = None
+    stop_event = Event()
+    
     print(BANNER)
 
-    # Parse parameters
-    server_url = args.server_url
-    user = args.user
-    token = args.token
-    verbose = args.verbose
-    exploit_directory = args.exploit_directory
-    num_threads = args.num_threads
+    server_url, user, token, verbose, exploit_directory, num_threads = \
+        args.server_url, args.user, args.token, args.verbose, args.exploit_directory, args.num_threads
 
+    logging.basicConfig(format='%(asctime)s %(levelname)s - %(message)s', datefmt='%H:%M:%S', level=logging.DEBUG if verbose else logging.INFO)
 
-    logging.basicConfig(format='%(asctime)s %(levelname)s - %(message)s',
-                        datefmt='%H:%M:%S', level=logging.DEBUG if verbose else logging.INFO)
-
-    # Retrieve configuration from server
-    logging.info('Connecting to the flagWarehouse server...')
-    r = None
-    
     try:
-        r = requests.get(server_url + '/api/get_config',
-                         headers={'X-Auth-Token': token})
-        
-        if r.status_code == 403:
-            logging.error('Wrong authorization token.')
-            logging.info('Exiting...')
-            sys.exit(0)
+        r = requests.get(server_url + '/api/get_config', headers={'X-Auth-Token': token}, timeout=10)
+        r.raise_for_status()
+    except Exception as e:
+        logging.error(f"Impossibile ottenere la configurazione dal server: {e}")
+        sys.exit(1)
 
-        if r.status_code != 200:
-            logging.error(f'GET {server_url}/api/get_config responded with [{r.status_code}].')
-            logging.info('Exiting...')
-            sys.exit(0)
-
-    except requests.exceptions.RequestException as e:
-        logging.error(f'Could not connect to {server_url}: ' + e.__class__.__name__)
-        logging.info('Exiting...')
-        sys.exit(0)
-
-    # Parse server config
     config = r.json()
-    # Print server config
-    if verbose:
-        logging.debug(json.dumps(config, indent=4, sort_keys=True))
-    
     flag_format = re.compile(config['format'])
     round_duration = config['round']
     teams = config['teams']
-    nopTeam = config.get('nop_team', '')
-    flagid_url = config.get('flagid_url', '')
-    team_token = config['team_token']
-    logging.info('Client correctly configured.')
-    
-    flagids_downloader = flagids.Flag_Ids_Downloader(flagid_url, nopTeam, team_token, args.type)
+    logging.info('Client configurato correttamente.')
 
-    # MAIN LOOP
-    while True:
-        try:
-            requests.head(server_url)
+    try:
+        manager = Manager()
+        service_status = manager.dict()
+        exploit_to_service_map = manager.dict()
+        last_success_memory = manager.dict()
+        flag_queue = manager.Queue()
+
+        submitter_thread = Thread(target=flag_submitter, args=(flag_queue, server_url, token, user, stop_event))
+        submitter_thread.start()
+
+        original_sigint_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
+        pool = Pool(num_threads)
+        signal.signal(signal.SIGINT, original_sigint_handler)
+
+        while True:
             s_time = time.time()
 
-            # Retrieve flag_ids
-            if flagid_url:
-                if not flagids_downloader.download_flag_ids():
-                    continue
-
-            # Load exploits
+            logging.info("Cerco nuovi exploit...")
             try:
-                scripts = [os.path.join(exploit_directory, s) for s in os.listdir(exploit_directory) if
-                os.path.isfile(os.path.join(exploit_directory, s)) and not s.startswith('.')]
+                scripts = [os.path.basename(s) for s in os.listdir(exploit_directory)
+                           if s.endswith('.py') and not s.startswith('.') and os.path.isfile(os.path.join(exploit_directory, s))]
                 
-                #Remove non python files
-                for s in scripts:
-                    if os.path.splitext(s)[-1].lower() != ".py":
-                        scripts.remove(s)
-                        logging.warning(f'{os.path.basename(s)} is not a python script, ignoring...')
-
-                # Fix non executable
-                for s in scripts:
-                    if not os.access(s, os.X_OK):
-                        os.chmod(s, 0o755)
-                        logging.warning(f'{os.path.basename(s)} is not executable, giving permission to execute...')
-
-                # Fix no shbang
-                for s in scripts:
-                    with open(s, 'r+', encoding='utf-8') as f:
-                        lines = f.readlines()
-                        if lines[0] != '#!/usr/bin/env python3\n':
-                            lines.insert(0, '#!/usr/bin/env python3\n')
-                            f.seek(0, 0)
-                            f.writelines(lines)
-                            f.close()
-                            logging.warning(f'{os.path.basename(s)} no shebang #!, adding it...')
-
-
-            except FileNotFoundError:
-                logging.error('The directory specified does not exist.')
-                logging.info('Exiting...')
-                sys.exit(0)
-            except PermissionError:
-                logging.error('You do not have the necessary permissions to use this directory.')
-                logging.info('Exiting')
-                sys.exit(0)
-
-            if scripts:
-                logging.info(
-                    f'Starting new round. Running {len(scripts)} exploits.')
-                logging.debug(f"Exploits: [{', '.join(map(lambda script: os.path.basename(script), scripts))}]")
-            else:
-                logging.info('No exploits found: retrying in 15 seconds')
+                for s_name in scripts:
+                    s_path = os.path.join(exploit_directory, s_name)
+                    if not os.access(s_path, os.X_OK):
+                        os.chmod(s_path, 0o755)
+                        logging.warning(f'{s_name} non era eseguibile, imposto i permessi...')
+            except (FileNotFoundError, PermissionError) as e:
+                logging.error(f"Errore nella directory degli exploit: {e}, salto questo round.")
                 time.sleep(15)
                 continue
 
-            original_sigint_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
-            pool = Pool(min(num_threads, len(scripts) * len(teams)))
-            signal.signal(signal.SIGINT, original_sigint_handler)
+            if not scripts:
+                logging.warning("Nessun exploit .py trovato. Riprovo tra 15 secondi.")
+                time.sleep(15)
+                continue
 
-            # Run exploits
-            random.shuffle(scripts)
+            try:
+                flag_ids_resp = requests.get(f'http://10.10.0.1:8081/flagIds?team=0', timeout=5)
+                flag_ids_resp.raise_for_status()
+                flag_ids = flag_ids_resp.json()
+                service = list(flag_ids.keys())[0]
+                rounds = sorted(list(flag_ids[service]['0']))
+            except (requests.exceptions.RequestException, KeyError, IndexError, ValueError) as e:
+                logging.error(f"Impossibile ottenere flag ID per la gestione dei round: {e}. Salto questo round.")
+                time.sleep(15)
+                continue
+            
+            logging.info(f"Inizio nuovo round. {len(scripts)} exploit su {len(teams)} team.")
+            
+            prioritized_tasks = []
+            other_tasks = []
+            
+            service_to_exploits_map = {}
+            current_exploit_map = dict(exploit_to_service_map) # Create a non-proxy copy for iteration
+            for exploit, service in current_exploit_map.items():
+                if service not in service_to_exploits_map:
+                    service_to_exploits_map[service] = []
+                service_to_exploits_map[service].append(exploit)
+
+            unknown_exploits = [s for s in scripts if s not in current_exploit_map]
+            if unknown_exploits:
+                service_to_exploits_map['unknown'] = unknown_exploits
+
+            all_known_services = list(service_to_exploits_map.keys())
             random.shuffle(teams)
-            for script in scripts:
-                for team in teams:
-                    pool.apply_async(
-                        run_exploit, (script, team, round_duration, server_url, token, flag_format, user))
-            pool.close()
-            pool.join()
+            random.shuffle(all_known_services)
+
+            for team in teams:
+                team_number_str = team.split('.')[2]
+                for service_id in all_known_services:
+                    last_successful_exploit = None
+
+                    if service_id != 'unknown':
+                        memory_key = f"{service_id}:{team_number_str}"
+                        # Chiediamo alla memoria chi è stato l'ultimo vincitore
+                        _round, exploit_name = last_success_memory.get(memory_key, (None, None))
+                        if exploit_name:
+                            last_successful_exploit = exploit_name
+
+                    current_exploits_for_service = service_to_exploits_map[service_id]
+
+                    if last_successful_exploit and last_successful_exploit in current_exploits_for_service:
+                        exploit_path = os.path.join(exploit_directory, last_successful_exploit)
+                        task_args = (exploit_path, team, rounds, round_duration, flag_format, user, service_status, exploit_to_service_map, last_success_memory, flag_queue)
+                        prioritized_tasks.append(task_args)
+
+                        for exploit_name in current_exploits_for_service:
+                            if exploit_name != last_successful_exploit:
+                                exploit_path = os.path.join(exploit_directory, exploit_name)
+                                task_args = (exploit_path, team, rounds, round_duration, flag_format, user, service_status, exploit_to_service_map, last_success_memory, flag_queue)
+                                other_tasks.append(task_args)
+                    else:
+                        for exploit_name in current_exploits_for_service:
+                            exploit_path = os.path.join(exploit_directory, exploit_name)
+                            task_args = (exploit_path, team, rounds, round_duration, flag_format, user, service_status, exploit_to_service_map, last_success_memory, flag_queue)
+                            other_tasks.append(task_args)
+            
+            random.shuffle(other_tasks)
+            tasks = prioritized_tasks + other_tasks
+            logging.info(f"Created {len(tasks)} tasks ({len(prioritized_tasks)} prioritized).")
+            
+            pool.starmap(run_exploit, tasks)
 
             duration = time.time() - s_time
-            logging.debug(f'round took {round(duration, 1)} seconds')
-
+            logging.info(f"Round completato in {duration:.2f} secondi.")
             if duration < round_duration:
-                logging.debug(f'Sleeping for {round(round_duration - duration, 1)} seconds')
-                time.sleep(round_duration - duration)
+                sleep_time = round_duration - duration
+                logging.info(f"In attesa per {sleep_time:.2f} secondi...")
+                time.sleep(sleep_time)
 
-        # Exceptions
-        except KeyboardInterrupt:
-            logging.info('Caught KeyboardInterrupt. Bye!')
+    except KeyboardInterrupt:
+        logging.info('Caught KeyboardInterrupt. Termino i processi... Bye!')
+    finally:
+        logging.info("Inizio procedura di spegnimento...")
+        if pool:
             pool.terminate()
-            break
-        except requests.exceptions.RequestException:
-            logging.error(
-                'Could not communicate with the server: retrying in 5 seconds.')
-            time.sleep(5)
-            continue
+            pool.join()
+        
+        # Ferma il thread submitter
+        if submitter_thread:
+            logging.info("Fermo il thread submitter...")
+            stop_event.set()
+            submitter_thread.join() # Attende la terminazione del thread
 
+        # Prima di chiudere il manager, prova a inviare le flag rimaste in coda.
+        if manager:
+            logging.info("Tento un ultimo invio delle flag rimaste in coda...")
+            # Creiamo una funzione locale o la chiamiamo direttamente
+            # per svuotare la coda un'ultima volta.
+            flags_to_send = []
+            while not flag_queue.empty():
+                try:
+                    flags_to_send.append(flag_queue.get_nowait())
+                except Empty:
+                    break
+            
+            if flags_to_send:
+                logging.info(f"Invio finale di {YELLOW}{len(flags_to_send)}{END} flag.")
+                try:
+                    msg = {'username': user, 'flags': flags_to_send}
+                    requests.post(f"{server_url}/api/upload_flags", headers={'X-Auth-Token': token}, json=msg, timeout=10)
+                    logging.info(f"{GREEN}Batch finale inviato con successo!{END}")
+                except requests.exceptions.RequestException as e:
+                    logging.error(f"{RED}Errore nell'invio del batch finale: {e}{END}")
+                    logging.error(f"{RED}Le seguenti flag potrebbero essere andate perse: {[f['flag'] for f in flags_to_send]}{END}")
+        
+        if manager:
+            manager.shutdown()
+        logging.info("Spegnimento completato.")
 
 if __name__ == '__main__':
     main(parse_args())
