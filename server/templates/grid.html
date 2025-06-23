@@ -1,0 +1,132 @@
+{% extends 'base.html' %}
+
+{% block header %}
+<h1 class="mt-2">{% block title %}Flag Submission Grid{% endblock %}</h1>
+{% endblock %}
+
+{% block content %}
+<style>
+  /* Stili per il form dei filtri */
+  .filter-form {
+    background-color: #f8f9fa;
+    padding: 1rem;
+    border-radius: 0.25rem;
+    margin-bottom: 1rem;
+    border: 1px solid #dee2e6;
+  }
+  .filter-form .form-check-label {
+    margin-left: .25rem;
+  }
+
+  /* Stili per la griglia e le celle */
+  .table-responsive {
+    max-height: 75vh;
+  }
+  .table thead {
+    position: -webkit-sticky; /* For Safari */
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  .grid-cell {
+    width: 60px;
+    height: 40px;
+    border: 1px solid #dee2e6;
+    padding: 2px;
+    vertical-align: middle !important;
+  }
+  .service-container {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    height: 100%;
+    width: 100%;
+  }
+  .service-indicator {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    margin: 1px;
+    box-shadow: 0 0 2px rgba(0,0,0,0.5);
+  }
+
+  /* === NUOVI STILI PER LA COLONNA FISSA === */
+  .sticky-col {
+    position: -webkit-sticky; /* For Safari */
+    position: sticky;
+    left: 0;
+    z-index: 5;
+  }
+  /* Imposta lo sfondo per la cella fissa nell'header per evitare trasparenze */
+  thead.thead-light .sticky-col {
+    background-color: #f8f9fa; /* Colore di sfondo di thead-light in Bootstrap */
+  }
+  /* Imposta lo sfondo per le celle fisse nel body */
+  tbody tr .sticky-col {
+    background-color: #ffffff; /* Sfondo bianco per le righe della tabella */
+  }
+  /* === FINE NUOVI STILI === */
+</style>
+
+<form method="get" action="{{ url_for('grid.show_grid') }}" class="filter-form">
+  <div class="form-group mb-2">
+    <strong class="mr-3">Filter by Service:</strong>
+    {% for service_id in all_services %}
+      <div class="form-check form-check-inline">
+        <input class="form-check-input" type="checkbox" name="service" value="{{ service_id }}" id="service-{{ service_id }}" {% if service_id in selected_services %}checked{% endif %}>
+        <label class="form-check-label" for="service-{{ service_id }}">
+          <span class="service-indicator" style="background-color: {{ service_colors.get(service_id, '#ccc') }};"></span>
+          {# Usa il nome del servizio dall'API, con un fallback #}
+          {{ service_names.get(service_id, 'Service ' ~ service_id) }}
+        </label>
+      </div>
+    {% else %}
+      <span class="text-muted">No services found in the last 12 hours.</span>
+    {% endfor %}
+  </div>
+  <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+  <a href="{{ url_for('grid.show_grid') }}" class="btn btn-secondary btn-sm">Reset</a>
+</form>
+
+<div class="table-responsive">
+  <table class="table table-bordered table-sm">
+    <thead class="thead-light">
+      <tr>
+        <th class="text-center sticky-col" style="min-width: 150px;">Team</th>
+        {% for round_num in rounds %}
+        <th class="text-center">Round {{ round_num }}</th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for team in teams %}
+      <tr>
+        <td class="font-weight-bold text-left align-middle sticky-col">{{ team['name'] }}</td>
+        {% for round_num in rounds %}
+          <td class="grid-cell">
+            <div class="service-container">
+            {# Recupera i servizi per la cella corrente #}
+            {% set captured_services = found_flags_by_service.get((round_num, team['id']), {}) %}
+            {% if captured_services %}
+              {# Mostra un indicatore colorato solo per i servizi selezionati nel filtro #}
+              {% for service_id in captured_services|sort %}
+                {% if service_id in selected_services %}
+                  <span class="service-indicator"
+                        style="background-color: {{ service_colors.get(service_id, '#cccccc') }};"
+                        {# Usa il nome del servizio dall'API per il tooltip, con un fallback #}
+                        title="{{ service_names.get(service_id, 'Service ' ~ service_id) }}">
+                  </span>
+                {% endif %}
+              {% endfor %}
+            {% endif %}
+            </div>
+          </td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
