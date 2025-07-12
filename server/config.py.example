@@ -1,5 +1,4 @@
 class Config(object):
-
 	# CHANGE THIS
 	TEAM = 9
 	NUMBER_OF_TEAMS = 43
