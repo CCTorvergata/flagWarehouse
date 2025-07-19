@@ -82,7 +82,7 @@ def parse_args():
 
     parser.add_argument('-y', '--type',
                        type=str,
-                       choices = ['ccit', 'hitb'],
+                       choices = ['ccit', 'hitb', 'enowars'],
                        default = 'ccit',
                        help='type of flagids')
 
