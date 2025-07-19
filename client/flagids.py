@@ -1,6 +1,7 @@
 import json
 import logging
 import os.path
+import time
 
 import requests
 
@@ -15,6 +16,8 @@ class Flag_Ids_Downloader:
             self.download_flag_ids = self.__download_flag_ids_ccit
         elif flagid_type.lower() == "hitb":
             self.download_flag_ids = self.__download_flag_ids_hitb
+        elif flagid_type.lower() == "enowars":
+            self.download_flag_ids = self.__download_flag_ids_enowars
         else:
             raise TypeError
 
@@ -23,7 +26,8 @@ class Flag_Ids_Downloader:
         Returns True if successful
         """
         try:
-            r = requests.get(self.flagid_url + "?team=" + self.nopTeam.split(".")[-2], timeout=15)
+            r = requests.get(self.flagid_url + "?team=" +
+                             self.nopTeam.split(".")[-2], timeout=15)
 
             if r.status_code != 200:
                 logging.error(
@@ -35,7 +39,8 @@ class Flag_Ids_Downloader:
             flag_ids = {}
             fail = False
             for service in services:
-                r = requests.get(self.flagid_url + "?service=" + service, timeout=15)
+                r = requests.get(self.flagid_url +
+                                 "?service=" + service, timeout=15)
                 if r.status_code != 200:
                     logging.error(
                         f'{self.flagid_url} responded with {r.status_code}: Retrying in 5 seconds.')
@@ -57,13 +62,13 @@ class Flag_Ids_Downloader:
             time.sleep(5)
             return False
 
-
     def __download_flag_ids_hitb(self) -> bool:
         """
         Returns True if successful
         """
         try:
-            r = requests.get(self.flagid_url + "/services", timeout=15, headers={'X-Team-Token':self.team_token})
+            r = requests.get(self.flagid_url + "/services", timeout=15,
+                             headers={'X-Team-Token': self.team_token})
 
             if r.status_code != 200:
                 logging.error(
@@ -75,13 +80,57 @@ class Flag_Ids_Downloader:
             flag_ids = {}
             fail = False
             for service in services:
-                r = requests.get(self.flagid_url + "/flag_ids?service=" + service, timeout=15, headers={'X-Team-Token':self.team_token})
+                r = requests.get(self.flagid_url + "/flag_ids?service=" + service,
+                                 timeout=15, headers={'X-Team-Token': self.team_token})
                 if r.status_code != 200:
                     logging.error(
                         f'{self.flagid_url} responded with {r.status_code}: Retrying in 5 seconds.')
                     fail = True
                     break
                 flag_ids[service] = r.json()['flag_ids']
+            if fail:
+                time.sleep(5)
+                return False
+
+            dir_path = os.path.dirname(os.path.realpath(__file__))
+            with open(f'{dir_path}/flag_ids.json', 'w', encoding='utf-8') as f:
+                json.dump(flag_ids, f)
+            return True
+
+        except TimeoutError:
+            logging.error(
+                f'{self.flagid_url} timed out: Retrying in 5 seconds.')
+            time.sleep(5)
+            return False
+
+    def __download_flag_ids_enowars(self) -> bool:
+        """
+        Returns True if successful
+        """
+        try:
+            r = requests.get(self.flagid_url, timeout=15)
+
+            if r.status_code != 200:
+                logging.error(
+                    f'{self.flagid_url} responded with {r.status_code}: Retrying in 5 seconds.')
+                time.sleep(5)
+                return False
+
+            services = list(r.json()['services'].keys())
+            flag_ids = {}
+            fail = False
+
+            for service in services:
+                r = requests.get(self.flagid_url + service, timeout=15)
+
+                if r.status_code != 200:
+                    logging.error(
+                        f'{self.flagid_url} responded with {r.status_code}: Retrying in 5 seconds.')
+                    fail = True
+                    break
+
+                flag_ids[service] = r.json()["services"].get(service, {})
+
             if fail:
                 time.sleep(5)
                 return False
