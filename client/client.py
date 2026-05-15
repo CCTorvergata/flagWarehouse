@@ -136,8 +136,7 @@ def run_exploit(exploit_path,
 
         known_service_id = exploit_to_service_map.get(exploit_name)
         if known_service_id:
-            status_key = f"{known_service_id}:{
-                team_number_str}:{round_num_str}"
+            status_key = f"{known_service_id}:{team_number_str}:{round_num_str}"
             if service_status.get(status_key):
                 # logging.debug(f"SKIP: Key {status_key} already completed by {service_status.get(status_key)}. Skipping {exploit_name}.")
                 continue
@@ -158,17 +157,14 @@ def run_exploit(exploit_path,
                 for f in set(flag_pattern.findall(output)):
                     parsed_round, parsed_team, parsed_service = parse_flag(f)
                     if not parsed_service:
-                        logging.warning(f"Flag malformata da {
-                                        exploit_name}: {f}")
+                        logging.warning(f"Flag malformata da {exploit_name}: {f}")
                         continue
 
                     if exploit_name not in exploit_to_service_map:
                         exploit_to_service_map[exploit_name] = parsed_service
-                        logging.info(f"LEARNED: {BLUE}{exploit_name}{
-                                     END} targets service {CYAN}{parsed_service}{END}")
+                        logging.info(f"LEARNED: {BLUE}{exploit_name}{END} targets service {CYAN}{parsed_service}{END}")
 
-                    status_key = f"{parsed_service}:{
-                        parsed_team}:{parsed_round}"
+                    status_key = f"{parsed_service}:{parsed_team}:{parsed_round}"
                     service_status[status_key] = exploit_name
 
                     memory_key = f"{parsed_service}:{parsed_team}"
@@ -183,8 +179,7 @@ def run_exploit(exploit_path,
                             current_round_int, exploit_name)
                         # logging.info(f"MEMORY UPDATE: For {memory_key}, new best exploit is {exploit_name} from round {current_round_int}")
 
-                    logging.info(f"Got flag from {BLUE}{exploit_name}{END} for service {CYAN}{
-                                 parsed_service}{END}, team {parsed_team}, round {parsed_round}")
+                    logging.info(f"Got flag from {BLUE}{exploit_name}{END} for service {CYAN}{parsed_service}{END}, team {parsed_team}, round {parsed_round}")
 
                     flag_data = {'flag': f,
                                  'exploit_name': exploit_name,
@@ -204,8 +199,7 @@ def run_exploit(exploit_path,
             p.stderr.close()
 
         except Exception as e:
-            logging.error(f"Errore imprevisto eseguendo {
-                          exploit_name} su {team_ip}: {e}")
+            logging.error(f"Errore imprevisto eseguendo { exploit_name} su {team_ip}: {e}")
         finally:
             if p and p.poll() is None:
                 p.kill()
@@ -216,8 +210,7 @@ def flag_submitter(flag_queue, server_url, token, user, stop_event):
     """
     Un thread che raccoglie le flag dalla coda e le invia al server in batch.
     """
-    logging.info(f"Thread submitter avviato. Invierà le flag ogni {
-                 SUBMISSION_INTERVAL} secondi.")
+    logging.info(f"Thread submitter avviato. Invierà le flag ogni {SUBMISSION_INTERVAL} secondi.")
     while not stop_event.is_set():
         try:
             # Aspetta l'intervallo di tempo prima di provare a inviare
@@ -235,18 +228,18 @@ def flag_submitter(flag_queue, server_url, token, user, stop_event):
             if not flags_to_send:
                 continue
 
-            logging.info(f"Invio di {YELLOW}{len(flags_to_send)}{
-                         END} flag al server...")
+            logging.info(f"Invio di {YELLOW}{len(flags_to_send)}{END} flag al server...")
             msg = {'username': user, 'flags': flags_to_send}
 
             try:
                 requests.post(f"{server_url}/api/upload_flags",
-                              headers={'X-Auth-Token': token}, json=msg, timeout=10)
+                              headers={'X-Auth-Token': token},
+                              json=msg,
+                              timeout=10)
                 logging.info(
                     f"{GREEN}Batch di flag inviato con successo!{END}")
             except requests.exceptions.RequestException as e:
-                logging.error(f"{RED}Errore nell'invio del batch di flag al server: {
-                              e}. Rimetto le flag in coda.{END}")
+                logging.error(f"{RED}Errore nell'invio del batch di flag al server: { e}. Rimetto le flag in coda.{END}")
                 # Reinserisci le flag nella coda per il prossimo tentativo
                 for flag_data in flags_to_send:
                     flag_queue.put(flag_data)
@@ -323,8 +316,7 @@ def main(args):
                         logging.warning(
                             f'{s_name} non era eseguibile, imposto i permessi...')
             except (FileNotFoundError, PermissionError) as e:
-                logging.error(f"Errore nella directory degli exploit: {
-                              e}, salto questo round.")
+                logging.error(f"Errore nella directory degli exploit: {e}, salto questo round.")
                 time.sleep(15)
                 continue
 
@@ -346,8 +338,7 @@ def main(args):
                 time.sleep(15)
                 continue
 
-            logging.info(f"Inizio nuovo round. {
-                         len(scripts)} exploit su {len(teams)} team.")
+            logging.info(f"Inizio nuovo round. {len(scripts)} exploit su {len(teams)} team.")
 
             prioritized_tasks = []
             other_tasks = []
@@ -434,8 +425,7 @@ def main(args):
 
             random.shuffle(other_tasks)
             tasks = prioritized_tasks + other_tasks
-            logging.info(f"Created {len(tasks)} tasks ({
-                         len(prioritized_tasks)} prioritized).")
+            logging.info(f"Created {len(tasks)} tasks ({len(prioritized_tasks)} prioritized).")
 
             pool.starmap(run_exploit, tasks)
 
@@ -473,8 +463,7 @@ def main(args):
                     break
 
             if flags_to_send:
-                logging.info(f"Invio finale di {YELLOW}{
-                             len(flags_to_send)}{END} flag.")
+                logging.info(f"Invio finale di {YELLOW}{len(flags_to_send)}{END} flag.")
                 try:
                     msg = {'username': user, 'flags': flags_to_send}
                     requests.post(f"{server_url}/api/upload_flags",
@@ -495,4 +484,3 @@ def main(args):
 
 if __name__ == '__main__':
     main(parse_args())
-
