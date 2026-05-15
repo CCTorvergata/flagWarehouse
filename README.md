@@ -17,9 +17,9 @@ stats and makes it possible to explore the database.
 
 ### Installation
 ```
-git clone https://github.com/ecavicc/flagWarehouse.git
+git clone https://github.com/CCTorvergata/flagWarehouse.git
 cd flagWarehouse/server
-pip3 install -r requirements.txt
+docker compose up -d --build
 ```
 ### Configuration
 Edit the parameters in [config.py](server/config.py)
