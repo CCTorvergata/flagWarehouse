@@ -38,6 +38,9 @@ def create_app():
     from . import submit
     app.register_blueprint(submit.bp)
 
+    from . import grid
+    app.register_blueprint(grid.bp)
+
     if not werkzeug.serving.is_running_from_reloader():
         threading.Thread(target=submission_loop.loop,
                          daemon=True,
