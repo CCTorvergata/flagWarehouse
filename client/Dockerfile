@@ -1,4 +1,4 @@
-FROM python:3.11
+FROM python:3.8
 
 RUN mkdir -p /flagWarehouse/client/
 COPY . /flagWarehouse/client/
